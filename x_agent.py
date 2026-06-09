@@ -124,7 +124,7 @@ def generate_tweet(news_context: str | None) -> str:
 ツイート本文のみ出力してください。"""
 
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-opus-4-8",
         max_tokens=400,
         messages=[{"role": "user", "content": user_prompt}],
     )
