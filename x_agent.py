@@ -70,14 +70,18 @@ FALLBACK_TOPICS = [
 ]
 
 
-def fetch_news() -> str | None:
-    """RSSフィードから就活・ビジネス関連の最新ニュースを取得する"""
+def fetch_news() -> tuple[str, str] | None:
+    """RSSフィードから就活・ビジネス関連の最新ニュースを取得する。(context, url) を返す"""
     items = []
     for url in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
             for entry in feed.entries[:5]:
-                items.append({"title": entry.title, "summary": getattr(entry, "summary", "")})
+                items.append({
+                    "title": entry.title,
+                    "summary": getattr(entry, "summary", ""),
+                    "link": getattr(entry, "link", ""),
+                })
         except Exception as e:
             log.warning(f"RSS取得失敗 {url}: {e}")
 
@@ -86,10 +90,11 @@ def fetch_news() -> str | None:
 
     random.shuffle(items)
     picked = items[0]
-    return f"タイトル: {picked['title']}\n概要: {picked['summary'][:200]}"
+    context = f"タイトル: {picked['title']}\n概要: {picked['summary'][:200]}"
+    return context, picked["link"]
 
 
-def generate_tweet(news_context: str | None) -> str:
+def generate_tweet(news_context: str | None, news_url: str | None = None) -> str:
     """Claude APIを使って就活に関するツイートを生成する"""
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
@@ -101,9 +106,9 @@ def generate_tweet(news_context: str | None) -> str:
 
 ルール:
 - IT業界を志望する就活生の役に立つ内容にしてください
-- 280文字以内（日本語）
+- ハッシュタグを含め230文字以内（日本語）に収める（末尾にURLを別途追加するため）
 - 改行を適度に使い読みやすく
-- 末尾に関連ハッシュタグを2〜3個付ける（例: #IT就活 #エンジニア就活 #26卒）
+- 末尾に関連ハッシュタグを2〜3個付ける（例: #IT就活 #エンジニア就活 #28卒）
 - 絵文字を1〜2個使って親しみやすく
 - 宣伝っぽくならないよう自然な口調で
 ツイート本文のみ出力してください。"""
@@ -117,7 +122,7 @@ def generate_tweet(news_context: str | None) -> str:
 - IT業界志望の就活生に役立つ具体的なアドバイスを書く
 - 280文字以内（日本語）
 - 改行を適度に使い読みやすく
-- 末尾に関連ハッシュタグを2〜3個付ける（例: #IT就活 #エンジニア就活 #26卒）
+- 末尾に関連ハッシュタグを2〜3個付ける（例: #IT就活 #エンジニア就活 #28卒）
 - 絵文字を1〜2個使って親しみやすく
 - 上から目線にならず、同じ目線で語りかけるように
 - 直近の投稿と内容が被らないように
@@ -128,7 +133,10 @@ def generate_tweet(news_context: str | None) -> str:
         max_tokens=400,
         messages=[{"role": "user", "content": user_prompt}],
     )
-    return message.content[0].text.strip()
+    tweet = message.content[0].text.strip()
+    if news_url:
+        tweet = f"{tweet}\n\n{news_url}"
+    return tweet
 
 
 def post_tweet(text: str) -> bool:
@@ -154,13 +162,15 @@ def run_once(dry_run: bool = False):
     """ニュース取得 → ツイート生成 → 投稿を1回実行する"""
     log.info("=== エージェント起動 ===")
 
-    news = fetch_news()
-    if news:
+    result = fetch_news()
+    if result:
+        news_context, news_url = result
         log.info("ニュースを取得しました")
     else:
+        news_context, news_url = None, None
         log.info("ニュース取得失敗。フォールバックトピックを使用します")
 
-    tweet = generate_tweet(news)
+    tweet = generate_tweet(news_context, news_url)
     log.info(f"生成ツイート:\n{tweet}")
 
     if dry_run:
