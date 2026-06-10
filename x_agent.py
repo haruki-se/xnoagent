@@ -184,24 +184,30 @@ def generate_tweet(news_context: str | None, news_url: str | None = None, trendi
     return tweet
 
 
+def _strip_emoji(text: str) -> str:
+    """絵文字を除去して文字化けを防ぐ"""
+    import unicodedata
+    return "".join(c for c in text if unicodedata.category(c) not in ("So", "Cs") and ord(c) < 0x10000)
+
+
 def generate_image_card(tweet_text: str) -> str:
     """ツイート内容からテキストカード画像を生成してパスを返す"""
     from PIL import Image, ImageDraw, ImageFont
 
     WIDTH, HEIGHT = 1200, 675
-    BG_COLOR = (13, 17, 38)
-    ACCENT_COLOR = (29, 115, 230)
-    TEXT_COLOR = (235, 240, 255)
-    HASHTAG_COLOR = (80, 160, 255)
-    BORDER_COLOR = (29, 115, 230)
+    BG_COLOR      = (13, 17, 38)
+    ACCENT_COLOR  = (29, 115, 230)
+    TEXT_COLOR    = (235, 240, 255)
+    HASHTAG_COLOR = (100, 170, 255)
 
-    img = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
+    img  = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
     draw = ImageDraw.Draw(img)
 
-    # 左側アクセントライン
-    draw.rectangle([(0, 0), (8, HEIGHT)], fill=BORDER_COLOR)
-    # 上部アクセントライン
-    draw.rectangle([(0, 0), (WIDTH, 6)], fill=BORDER_COLOR)
+    # 枠線
+    draw.rectangle([(0, 0), (8, HEIGHT)], fill=ACCENT_COLOR)
+    draw.rectangle([(0, 0), (WIDTH, 6)], fill=ACCENT_COLOR)
+    draw.rectangle([(WIDTH - 8, 0), (WIDTH, HEIGHT)], fill=ACCENT_COLOR)
+    draw.rectangle([(0, HEIGHT - 6), (WIDTH, HEIGHT)], fill=ACCENT_COLOR)
 
     # フォント読み込み（Ubuntu / Windows 両対応）
     font_candidates = [
@@ -213,36 +219,35 @@ def generate_image_card(tweet_text: str) -> str:
         "C:/Windows/Fonts/msgothic.ttc",
     ]
     font_path = next((p for p in font_candidates if os.path.exists(p)), None)
-
     try:
-        title_font = ImageFont.truetype(font_path, 52) if font_path else ImageFont.load_default()
-        body_font  = ImageFont.truetype(font_path, 38) if font_path else ImageFont.load_default()
-        tag_font   = ImageFont.truetype(font_path, 30) if font_path else ImageFont.load_default()
+        title_font = ImageFont.truetype(font_path, 54) if font_path else ImageFont.load_default()
+        body_font  = ImageFont.truetype(font_path, 36) if font_path else ImageFont.load_default()
+        tag_font   = ImageFont.truetype(font_path, 28) if font_path else ImageFont.load_default()
     except Exception:
         title_font = body_font = tag_font = ImageFont.load_default()
 
-    # 本文とハッシュタグを分離
-    lines = tweet_text.split("\n")
-    tag_lines  = [l.strip() for l in lines if l.strip().startswith("#")]
-    body_lines = [l for l in lines if not l.strip().startswith("#") and l.strip()]
-    body_text  = "\n".join(body_lines).strip()
+    # 本文とハッシュタグを分離（絵文字除去）
+    raw_lines  = tweet_text.split("\n")
+    tag_lines  = [_strip_emoji(l.strip()) for l in raw_lines if l.strip().startswith("#")]
+    body_lines = [_strip_emoji(l) for l in raw_lines if not l.strip().startswith("#") and l.strip() and not l.startswith("http")]
     hashtag_text = "  ".join(tag_lines)
 
     # タイトル
-    draw.text((52, 56), "💡 IT就活Tips", font=title_font, fill=ACCENT_COLOR)
+    draw.text((52, 48), "IT就活 Tips", font=title_font, fill=ACCENT_COLOR)
+    draw.rectangle([(52, 120), (WIDTH - 52, 124)], fill=(40, 60, 110))
 
-    # 区切り線
-    draw.rectangle([(52, 128), (WIDTH - 52, 132)], fill=(40, 60, 100))
-
-    # 本文（20文字で折り返し）
-    wrapped_lines = []
-    for line in body_text.split("\n"):
-        for i in range(0, max(len(line), 1), 20):
-            wrapped_lines.append(line[i:i+20])
-    draw.text((52, 160), "\n".join(wrapped_lines), font=body_font, fill=TEXT_COLOR, spacing=14)
+    # 本文：22文字で折り返し、最大7行まで表示
+    wrapped: list[str] = []
+    for line in body_lines:
+        if not line.strip():
+            continue
+        for i in range(0, max(len(line), 1), 22):
+            wrapped.append(line[i:i + 22])
+    wrapped = wrapped[:7]
+    draw.text((52, 148), "\n".join(wrapped), font=body_font, fill=TEXT_COLOR, spacing=16)
 
     # ハッシュタグ
-    draw.text((52, HEIGHT - 72), hashtag_text, font=tag_font, fill=HASHTAG_COLOR)
+    draw.text((52, HEIGHT - 68), hashtag_text, font=tag_font, fill=HASHTAG_COLOR)
 
     path = os.path.join(os.path.dirname(__file__), "tweet_card.png")
     img.save(path)
