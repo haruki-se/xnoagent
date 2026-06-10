@@ -1,14 +1,7 @@
 name: X Auto Post
 
 on:
-  schedule:
-    - cron: '30 22 * * *'  # 07:30 JST
-    - cron: '0 1 * * *'    # 10:00 JST
-    - cron: '15 3 * * *'   # 12:15 JST
-    - cron: '0 6 * * *'    # 15:00 JST
-    - cron: '30 9 * * *'   # 18:30 JST
-    - cron: '0 12 * * *'   # 21:00 JST
-  workflow_dispatch:        # 手動実行も可能
+  workflow_dispatch:
 
 jobs:
   post:
