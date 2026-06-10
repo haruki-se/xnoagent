@@ -184,9 +184,81 @@ def generate_tweet(news_context: str | None, news_url: str | None = None, trendi
     return tweet
 
 
+def generate_image_card(tweet_text: str) -> str:
+    """ツイート内容からテキストカード画像を生成してパスを返す"""
+    from PIL import Image, ImageDraw, ImageFont
+
+    WIDTH, HEIGHT = 1200, 675
+    BG_COLOR = (13, 17, 38)
+    ACCENT_COLOR = (29, 115, 230)
+    TEXT_COLOR = (235, 240, 255)
+    HASHTAG_COLOR = (80, 160, 255)
+    BORDER_COLOR = (29, 115, 230)
+
+    img = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+
+    # 左側アクセントライン
+    draw.rectangle([(0, 0), (8, HEIGHT)], fill=BORDER_COLOR)
+    # 上部アクセントライン
+    draw.rectangle([(0, 0), (WIDTH, 6)], fill=BORDER_COLOR)
+
+    # フォント読み込み（Ubuntu / Windows 両対応）
+    font_candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "C:/Windows/Fonts/YuGothR.ttc",
+        "C:/Windows/Fonts/meiryo.ttc",
+        "C:/Windows/Fonts/msgothic.ttc",
+    ]
+    font_path = next((p for p in font_candidates if os.path.exists(p)), None)
+
+    try:
+        title_font = ImageFont.truetype(font_path, 52) if font_path else ImageFont.load_default()
+        body_font  = ImageFont.truetype(font_path, 38) if font_path else ImageFont.load_default()
+        tag_font   = ImageFont.truetype(font_path, 30) if font_path else ImageFont.load_default()
+    except Exception:
+        title_font = body_font = tag_font = ImageFont.load_default()
+
+    # 本文とハッシュタグを分離
+    lines = tweet_text.split("\n")
+    tag_lines  = [l.strip() for l in lines if l.strip().startswith("#")]
+    body_lines = [l for l in lines if not l.strip().startswith("#") and l.strip()]
+    body_text  = "\n".join(body_lines).strip()
+    hashtag_text = "  ".join(tag_lines)
+
+    # タイトル
+    draw.text((52, 56), "💡 IT就活Tips", font=title_font, fill=ACCENT_COLOR)
+
+    # 区切り線
+    draw.rectangle([(52, 128), (WIDTH - 52, 132)], fill=(40, 60, 100))
+
+    # 本文（20文字で折り返し）
+    wrapped_lines = []
+    for line in body_text.split("\n"):
+        for i in range(0, max(len(line), 1), 20):
+            wrapped_lines.append(line[i:i+20])
+    draw.text((52, 160), "\n".join(wrapped_lines), font=body_font, fill=TEXT_COLOR, spacing=14)
+
+    # ハッシュタグ
+    draw.text((52, HEIGHT - 72), hashtag_text, font=tag_font, fill=HASHTAG_COLOR)
+
+    path = os.path.join(os.path.dirname(__file__), "tweet_card.png")
+    img.save(path)
+    return path
+
+
 def post_tweet(text: str) -> bool:
     """X APIでツイートを投稿する"""
     try:
+        auth = tweepy.OAuth1UserHandler(X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET)
+        api_v1 = tweepy.API(auth)
+
+        image_path = generate_image_card(text)
+        media = api_v1.media_upload(filename=image_path)
+        os.remove(image_path)
+
         client = tweepy.Client(
             bearer_token=X_BEARER_TOKEN,
             consumer_key=X_API_KEY,
@@ -194,7 +266,7 @@ def post_tweet(text: str) -> bool:
             access_token=X_ACCESS_TOKEN,
             access_token_secret=X_ACCESS_SECRET,
         )
-        response = client.create_tweet(text=text)
+        response = client.create_tweet(text=text, media_ids=[media.media_id])
         tweet_id = response.data["id"]
         log.info(f"投稿成功 tweet_id={tweet_id}")
         return True
