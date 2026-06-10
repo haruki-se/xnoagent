@@ -94,11 +94,54 @@ def fetch_news() -> tuple[str, str] | None:
     return context, picked["link"]
 
 
-def generate_tweet(news_context: str | None, news_url: str | None = None) -> str:
+def fetch_trending_tweets() -> str | None:
+    """X APIで就活界隈のバズっているツイートを取得する"""
+    try:
+        client = tweepy.Client(bearer_token=X_BEARER_TOKEN)
+        response = client.search_recent_tweets(
+            query="#就活 #IT就活 -is:retweet lang:ja",
+            max_results=10,
+            tweet_fields=["public_metrics"],
+            sort_order="relevancy",
+        )
+        if not response.data:
+            return None
+        tweets = sorted(
+            response.data,
+            key=lambda t: t.public_metrics["like_count"] + t.public_metrics["retweet_count"] * 2,
+            reverse=True,
+        )
+        parts = []
+        for i, t in enumerate(tweets[:3], 1):
+            m = t.public_metrics
+            parts.append(f"【参考{i}】\n{t.text}\nいいね:{m['like_count']} RT:{m['retweet_count']}")
+        return "\n\n".join(parts)
+    except Exception as e:
+        log.warning(f"トレンドツイート取得失敗: {e}")
+        return None
+
+
+def generate_tweet(news_context: str | None, news_url: str | None = None, trending_context: str | None = None) -> str:
     """Claude APIを使って就活に関するツイートを生成する"""
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
-    if news_context:
+    if trending_context:
+        user_prompt = f"""以下は就活界隈でバズっているツイートです。これらを参考に、IT就活生に役立つ独自のツイートを作成してください。
+
+【バズっている投稿】
+{trending_context}
+
+ルール:
+- 参考投稿のコピーは絶対にしない。テーマやトーンを参考に独自の内容にする
+- IT業界を志望する就活生の役に立つ内容
+- 280文字以内（日本語）
+- 改行を適度に使い読みやすく
+- 末尾に関連ハッシュタグを2〜3個付ける（例: #IT就活 #エンジニア就活 #28卒）
+- ハッシュタグは必ず #28卒 を使うこと。#26卒 #27卒 は絶対に使わないこと
+- 絵文字を1〜2個使って親しみやすく
+- 上から目線にならず、同じ目線で語りかけるように
+ツイート本文のみ出力してください。"""
+    elif news_context:
         user_prompt = f"""以下のIT業界のニュースを参考に、IT就活生に役立つ情報をツイートしてください。
 
 【参考ニュース】
@@ -164,15 +207,20 @@ def run_once(dry_run: bool = False):
     """ニュース取得 → ツイート生成 → 投稿を1回実行する"""
     log.info("=== エージェント起動 ===")
 
-    result = fetch_news()
-    if result:
-        news_context, news_url = result
-        log.info("ニュースを取得しました")
+    trending_context = fetch_trending_tweets()
+    if trending_context:
+        log.info("トレンドツイートを取得しました")
+        tweet = generate_tweet(None, None, trending_context)
     else:
-        news_context, news_url = None, None
-        log.info("ニュース取得失敗。フォールバックトピックを使用します")
-
-    tweet = generate_tweet(news_context, news_url)
+        log.info("トレンド取得失敗。RSSニュースにフォールバックします")
+        result = fetch_news()
+        if result:
+            news_context, news_url = result
+            log.info("ニュースを取得しました")
+        else:
+            news_context, news_url = None, None
+            log.info("ニュース取得失敗。フォールバックトピックを使用します")
+        tweet = generate_tweet(news_context, news_url)
     log.info(f"生成ツイート:\n{tweet}")
 
     if dry_run:
