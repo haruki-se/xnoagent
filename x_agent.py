@@ -215,14 +215,50 @@ def _strip_emoji(text: str) -> str:
     return "".join(c for c in text if unicodedata.category(c) not in ("So", "Cs") and ord(c) < 0x10000)
 
 
+def generate_card_content(tweet_text: str) -> dict:
+    """ツイートをカード用に要約する（title / points / summary）"""
+    import json
+    client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        messages=[{"role": "user", "content": f"""以下のツイートをカード画像用に要約してください。
+
+ツイート:
+{tweet_text}
+
+以下のJSON形式のみ出力してください（余分なテキスト不要）:
+{{
+  "title": "15文字以内のタイトル",
+  "points": ["ポイント1（20文字以内）", "ポイント2（20文字以内）", "ポイント3（20文字以内）"],
+  "summary": "まとめの一言（25文字以内）"
+}}"""}],
+    )
+    try:
+        return json.loads(message.content[0].text.strip())
+    except Exception:
+        return {"title": "IT就活Tips", "points": [], "summary": ""}
+
+
 def generate_image_card(tweet_text: str) -> str:
     """ツイート内容からテキストカード画像を生成してパスを返す"""
     from PIL import Image, ImageDraw, ImageFont
+
+    card = generate_card_content(tweet_text)
+    card_title   = _strip_emoji(card.get("title", "IT就活Tips"))
+    card_points  = [_strip_emoji(p) for p in card.get("points", [])]
+    card_summary = _strip_emoji(card.get("summary", ""))
+
+    # ハッシュタグをツイート本文から抽出
+    tag_lines = [l.strip() for l in tweet_text.split("\n") if l.strip().startswith("#")]
+    hashtag_text = "  ".join(tag_lines)
 
     WIDTH, HEIGHT = 1200, 675
     BG_COLOR      = (13, 17, 38)
     ACCENT_COLOR  = (29, 115, 230)
     TEXT_COLOR    = (235, 240, 255)
+    POINT_COLOR   = (200, 220, 255)
+    SUMMARY_COLOR = (160, 200, 255)
     HASHTAG_COLOR = (100, 170, 255)
 
     img  = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
@@ -234,7 +270,6 @@ def generate_image_card(tweet_text: str) -> str:
     draw.rectangle([(WIDTH - 8, 0), (WIDTH, HEIGHT)], fill=ACCENT_COLOR)
     draw.rectangle([(0, HEIGHT - 6), (WIDTH, HEIGHT)], fill=ACCENT_COLOR)
 
-    # フォント読み込み（Ubuntu / Windows 両対応）
     font_candidates = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
@@ -245,34 +280,36 @@ def generate_image_card(tweet_text: str) -> str:
     ]
     font_path = next((p for p in font_candidates if os.path.exists(p)), None)
     try:
-        title_font = ImageFont.truetype(font_path, 54) if font_path else ImageFont.load_default()
-        body_font  = ImageFont.truetype(font_path, 36) if font_path else ImageFont.load_default()
-        tag_font   = ImageFont.truetype(font_path, 28) if font_path else ImageFont.load_default()
+        header_font  = ImageFont.truetype(font_path, 42) if font_path else ImageFont.load_default()
+        title_font   = ImageFont.truetype(font_path, 48) if font_path else ImageFont.load_default()
+        point_font   = ImageFont.truetype(font_path, 34) if font_path else ImageFont.load_default()
+        summary_font = ImageFont.truetype(font_path, 30) if font_path else ImageFont.load_default()
+        tag_font     = ImageFont.truetype(font_path, 26) if font_path else ImageFont.load_default()
     except Exception:
-        title_font = body_font = tag_font = ImageFont.load_default()
+        header_font = title_font = point_font = summary_font = tag_font = ImageFont.load_default()
 
-    # 本文とハッシュタグを分離（絵文字除去）
-    raw_lines  = tweet_text.split("\n")
-    tag_lines  = [_strip_emoji(l.strip()) for l in raw_lines if l.strip().startswith("#")]
-    body_lines = [_strip_emoji(l) for l in raw_lines if not l.strip().startswith("#") and l.strip() and not l.startswith("http")]
-    hashtag_text = "  ".join(tag_lines)
+    # ヘッダー「IT就活 Tips」
+    draw.text((40, 40), "IT就活 Tips", font=header_font, fill=ACCENT_COLOR)
+    draw.rectangle([(40, 102), (WIDTH - 40, 106)], fill=(40, 60, 110))
 
     # タイトル
-    draw.text((52, 48), "IT就活 Tips", font=title_font, fill=ACCENT_COLOR)
-    draw.rectangle([(52, 120), (WIDTH - 52, 124)], fill=(40, 60, 110))
+    draw.text((40, 118), card_title, font=title_font, fill=TEXT_COLOR)
 
-    # 本文：22文字で折り返し、最大7行まで表示
-    wrapped: list[str] = []
-    for line in body_lines:
-        if not line.strip():
-            continue
-        for i in range(0, max(len(line), 1), 22):
-            wrapped.append(line[i:i + 22])
-    wrapped = wrapped[:7]
-    draw.text((52, 148), "\n".join(wrapped), font=body_font, fill=TEXT_COLOR, spacing=16)
+    # ポイント
+    y = 188
+    for point in card_points[:3]:
+        draw.text((40, y), f"・{point}", font=point_font, fill=POINT_COLOR)
+        y += 52
+
+    # 区切り線
+    draw.rectangle([(40, y + 8), (WIDTH - 40, y + 11)], fill=(40, 60, 110))
+
+    # まとめ
+    if card_summary:
+        draw.text((40, y + 20), card_summary, font=summary_font, fill=SUMMARY_COLOR)
 
     # ハッシュタグ
-    draw.text((52, HEIGHT - 68), hashtag_text, font=tag_font, fill=HASHTAG_COLOR)
+    draw.text((40, HEIGHT - 60), hashtag_text, font=tag_font, fill=HASHTAG_COLOR)
 
     path = os.path.join(os.path.dirname(__file__), "tweet_card.png")
     img.save(path)
