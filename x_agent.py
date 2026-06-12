@@ -94,12 +94,37 @@ def fetch_news() -> tuple[str, str] | None:
     return context, picked["link"]
 
 
+TRENDING_HASHTAGS = [
+    "#IT就活",
+    "#エンジニア就活",
+    "#就活",
+    "#インターン",
+    "#自己PR",
+    "#ES就活",
+    "#就活面接",
+    "#ポートフォリオ",
+    "#就活生と繋がりたい",
+    "#新卒エンジニア",
+    "#理系就活",
+    "#SIer",
+    "#web系就活",
+    "#プログラミング",
+    "#就活対策",
+    "#OB訪問",
+    "#グループディスカッション",
+    "#就活軸",
+]
+
+
 def fetch_trending_tweets() -> str | None:
     """X APIで就活界隈のバズっているツイートを取得する"""
     try:
+        tag = random.choice(TRENDING_HASHTAGS)
+        query = f"#28卒 {tag} -is:retweet lang:ja"
+        log.info(f"トレンド検索クエリ: {query}")
         client = tweepy.Client(bearer_token=X_BEARER_TOKEN)
         response = client.search_recent_tweets(
-            query="#就活 #IT就活 -is:retweet lang:ja",
+            query=query,
             max_results=10,
             tweet_fields=["public_metrics"],
             sort_order="relevancy",
