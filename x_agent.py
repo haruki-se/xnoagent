@@ -218,6 +218,7 @@ def _strip_emoji(text: str) -> str:
 def generate_card_content(tweet_text: str) -> dict:
     """ツイートをカード用に要約する（title / points / summary）"""
     import json
+    import re
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
@@ -227,16 +228,19 @@ def generate_card_content(tweet_text: str) -> dict:
 ツイート:
 {tweet_text}
 
-以下のJSON形式のみ出力してください（余分なテキスト不要）:
+以下のJSON形式のみ出力してください（コードブロック不要、余分なテキスト不要）:
 {{
   "title": "15文字以内のタイトル",
   "points": ["ポイント1（20文字以内）", "ポイント2（20文字以内）", "ポイント3（20文字以内）"],
   "summary": "まとめの一言（25文字以内）"
 }}"""}],
     )
+    raw = message.content[0].text.strip()
+    raw = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
     try:
-        return json.loads(message.content[0].text.strip())
-    except Exception:
+        return json.loads(raw)
+    except Exception as e:
+        log.warning(f"カードJSON解析失敗: {e} / raw={raw}")
         return {"title": "IT就活Tips", "points": [], "summary": ""}
 
 
