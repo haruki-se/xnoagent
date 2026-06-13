@@ -148,6 +148,10 @@ def generate_tweet(news_context: str | None, news_url: str | None = None, trendi
     """Claude APIを使って就活に関するツイートを生成する"""
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
+    TONE = """- 「〜していますか？」「〜するのはどうなんだろう？」のような問いかけ・疑問形の口調を使う
+- 読者に語りかけ、一緒に考えるようなスタンスで書く
+- 上から目線の断言は避ける"""
+
     if trending_context:
         user_prompt = f"""以下は就活界隈でバズっているツイートです。これらを参考に、「就活×AI活用」をテーマにした独自のツイートを作成してください。
 
@@ -162,7 +166,7 @@ def generate_tweet(news_context: str | None, news_url: str | None = None, trendi
 - 末尾に関連ハッシュタグを2〜3個付ける（例: #就活 #AI就活 #28卒）
 - ハッシュタグは必ず #28卒 を使うこと。#26卒 #27卒 は絶対に使わないこと
 - 絵文字を1〜2個使って親しみやすく
-- 上から目線にならず、同じ目線で語りかけるように
+{TONE}
 ツイート本文のみ出力してください。"""
     elif news_context:
         user_prompt = f"""以下のニュースを参考に、「就活×AI活用」をテーマにしたツイートを作成してください。
@@ -177,7 +181,7 @@ def generate_tweet(news_context: str | None, news_url: str | None = None, trendi
 - 末尾に関連ハッシュタグを2〜3個付ける（例: #就活 #AI就活 #28卒）
 - ハッシュタグは必ず #28卒 を使うこと。#26卒 #27卒 は絶対に使わないこと
 - 絵文字を1〜2個使って親しみやすく
-- 宣伝っぽくならないよう自然な口調で
+{TONE}
 ツイート本文のみ出力してください。"""
     else:
         topic = random.choice(FALLBACK_TOPICS)
@@ -192,8 +196,8 @@ def generate_tweet(news_context: str | None, news_url: str | None = None, trendi
 - 末尾に関連ハッシュタグを2〜3個付ける（例: #就活 #AI就活 #28卒）
 - ハッシュタグは必ず #28卒 を使うこと。#26卒 #27卒 は絶対に使わないこと
 - 絵文字を1〜2個使って親しみやすく
-- 上から目線にならず、同じ目線で語りかけるように
 - 直近の投稿と内容が被らないように
+{TONE}
 ツイート本文のみ出力してください。"""
 
     message = client.messages.create(
