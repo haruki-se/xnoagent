@@ -40,9 +40,10 @@ log = logging.getLogger(__name__)
 
 # ── AI・就活関連 RSS フィード ─────────────────
 RSS_FEEDS = [
-    "https://news.yahoo.co.jp/rss/topics/it.xml",
-    "https://rss.itmedia.co.jp/rss/2.0/itmedia_all.xml",
-    "https://zenn.dev/feed",
+    "https://zenn.dev/topics/ai/feed",       # Zenn AI特集
+    "https://zenn.dev/topics/chatgpt/feed",  # Zenn ChatGPT特集
+    "https://qiita.com/tags/ai/feed",        # Qiita AIタグ
+    "https://qiita.com/tags/chatgpt/feed",   # Qiita ChatGPTタグ
 ]
 
 # ── 就活×AI活用トピック（フォールバック） ────────
